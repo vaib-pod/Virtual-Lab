@@ -63,7 +63,7 @@ npm install
 npm run dev
 ```
 
-4. Test the Multiplayer Engine
+### 4. Test the Multiplayer Engine
 
 - Open http://localhost:5173 in your browser.
 - Click Local Mode, enter a username, and click Create New Shared Lab. Note the generated 6-character room code.
