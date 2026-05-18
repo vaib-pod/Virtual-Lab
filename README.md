@@ -36,5 +36,44 @@ Follow these instructions to run a local instance of the Virtual-Lab.
 
 ### 1. Clone the repository
 ```bash
-git clone [https://github.com/](https://github.com/)[YOUR GITHUB USERNAME]/Virtual-Lab.git
+git clone [https://github.com/](https://github.com/)vaib-pod/Virtual-Lab.git
 cd Virtual-Lab
+```
+
+### 2. Setup the backend
+
+```bash
+cd backend
+npm install
+```
+Create a .env file in the backend directory and add your MongoDB connection string:
+```bash
+PORT=5000
+MONGO_URI=your_mongodb_connection_string_here
+```
+Start the backend server:
+```bash
+npm run dev
+```
+
+### 3. Setup the frontend
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+4. Test the Multiplayer Engine
+
+- Open http://localhost:5173 in your browser.
+- Click Local Mode, enter a username, and click Create New Shared Lab. Note the generated 6-character room code.
+- Open a completely separate browser or an Incognito window and navigate to http://localhost:5173.
+- Enter a different username, paste the room code, and click Join.
+- Start spawning and throwing blocks on one screen, and watch the physics synchronize flawlessly on the other!
+
+### Architecture Highlights: The Agent Middleware
+Synchronizing a physics engine across multiple browsers requires strict state management to prevent "rubber-banding" (where objects snap back and forth).
+
+To solve this, Virtual-Lab uses an Agent Middleware pattern. Instead of every client calculating their own gravity and colliding with each other, the room assigns one client as the "Host". The backend acts purely as an ultra-fast relay router. The Host computes the physics and pushes the results to the Guests. If the Host leaves, the Node.js server intercepts the disconnect event, queries the room's socket pool, and instantly promotes a new Host to keep the simulation alive.
+
+
