@@ -1,0 +1,8 @@
+{
+  "dependencies": {
+    "@tailwindcss/vite": "^4.3.0",
+    "matter-js": "^0.20.0",
+    "recharts": "^3.8.1",
+    "tailwindcss": "^4.3.0"
+  }
+}
