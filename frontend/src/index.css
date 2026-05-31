@@ -1,1 +1,10 @@
+@font-face {
+  font-family: 'Rostex';
+  /* If you put it in a fonts folder, use url('/fonts/Rostex.ttf') */
+  src: url('/Rostex.ttf') format('truetype'); 
+  font-weight: normal;
+  font-style: normal;
+}
+
+
 @import "tailwindcss";

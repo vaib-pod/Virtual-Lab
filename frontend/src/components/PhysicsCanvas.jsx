@@ -1,7 +1,8 @@
 import { useEffect, useRef, forwardRef, useImperativeHandle } from 'react';
 import Matter from 'matter-js';
 
-const PhysicsCanvas = forwardRef(({ onUpdateStats, activeTool, socket, roomCode, isHost }, ref) => {
+// NEW: Accept isDarkMode as a prop
+const PhysicsCanvas = forwardRef(({ onUpdateStats, activeTool, socket, roomCode, isHost, isDarkMode }, ref) => {
   const sceneRef = useRef(null);
   const engineRef = useRef(null);
   
@@ -10,14 +11,45 @@ const PhysicsCanvas = forwardRef(({ onUpdateStats, activeTool, socket, roomCode,
   const socketRef = useRef(socket);
   const roomCodeRef = useRef(roomCode);
   const isHostRef = useRef(isHost);
+  
+  // NEW: Track the theme state for callbacks
+  const isDarkModeRef = useRef(isDarkMode);
 
-  // NEW: Track the specific body the user is currently dragging
+  // Track the specific body the user is currently dragging
   const draggedBodyRef = useRef(null);
 
   useEffect(() => { activeToolRef.current = activeTool; }, [activeTool]);
   useEffect(() => { socketRef.current = socket; }, [socket]);
   useEffect(() => { roomCodeRef.current = roomCode; }, [roomCode]);
   useEffect(() => { isHostRef.current = isHost; }, [isHost]);
+  // NEW: Keep theme ref updated
+  useEffect(() => { isDarkModeRef.current = isDarkMode; }, [isDarkMode]);
+
+  // NEW HELPER: Get correct background and floor colors based on theme. 
+  // We intentionally leave the block colors alone so they stay randomly colorful!
+  const getThemeColors = () => ({
+    background: isDarkModeRef.current ? '#0f172a' : '#ffffff', // Slate-950 vs White
+    floor: isDarkModeRef.current ? '#334155' : '#cbd5e1'       // Slate-700 vs Slate-300
+  });
+
+  // NEW EFFECT: Repaint the canvas and static bodies instantly when the toggle is clicked
+  useEffect(() => {
+    if (!engineRef.current) return;
+    const colors = getThemeColors();
+    
+    // Change actual canvas background color smoothly
+    if (sceneRef.current && sceneRef.current.firstChild) {
+      sceneRef.current.firstChild.style.backgroundColor = colors.background;
+      sceneRef.current.firstChild.style.transition = 'background-color 0.3s ease';
+    }
+
+    // Loop through all physical bodies and repaint ONLY the static floor
+    engineRef.current.world.bodies.forEach(body => {
+      if (body.isStatic) {
+        body.render.fillStyle = colors.floor;
+      }
+    });
+  }, [isDarkMode]);
 
   useImperativeHandle(ref, () => ({
     addSquare: (remoteId = null) => {
@@ -100,12 +132,16 @@ const PhysicsCanvas = forwardRef(({ onUpdateStats, activeTool, socket, roomCode,
     const engine = Engine.create();
     engineRef.current = engine;
 
+    const colors = getThemeColors(); // Fetch initial colors
+
     const render = Render.create({
       element: sceneRef.current, engine: engine,
-      options: { width: 800, height: 600, wireframes: false, background: 'transparent' }
+      // Apply the dynamic initial background
+      options: { width: 800, height: 600, wireframes: false, background: colors.background }
     });
 
-    const floor = Bodies.rectangle(400, 850, 810, 600, { isStatic: true, render: { fillStyle: '#334155' } });
+    // Apply the dynamic initial floor color
+    const floor = Bodies.rectangle(400, 850, 810, 600, { isStatic: true, render: { fillStyle: colors.floor } });
     const leftWall = Bodies.rectangle(-25, 300, 50, 600, { isStatic: true, render: { visible: false } });
     const rightWall = Bodies.rectangle(825, 300, 50, 600, { isStatic: true, render: { visible: false } });
     const ceiling = Bodies.rectangle(400, -25, 810, 50, { isStatic: true, render: { visible: false } });
@@ -122,7 +158,6 @@ const PhysicsCanvas = forwardRef(({ onUpdateStats, activeTool, socket, roomCode,
     Composite.add(engine.world, mouseConstraint);
     render.mouse = mouse;
 
-    // --- NEW HELPER: Creates linkage locally AND visually ---
     const createLocalLink = (bodyA, bodyB, isSpring) => {
       const newLink = Constraint.create({
         bodyA: bodyA, bodyB: bodyB, stiffness: isSpring ? 0.05 : 0.9,
@@ -132,7 +167,6 @@ const PhysicsCanvas = forwardRef(({ onUpdateStats, activeTool, socket, roomCode,
       Composite.add(engine.world, newLink);
     };
 
-    // --- MOUSE EVENTS: TRACK DRAGGING AND CLICKING ---
     Events.on(mouseConstraint, 'startdrag', (event) => {
       if (event.body) draggedBodyRef.current = event.body;
     });
@@ -159,7 +193,6 @@ const PhysicsCanvas = forwardRef(({ onUpdateStats, activeTool, socket, roomCode,
           const isSpring = tool === 'spring';
           createLocalLink(bodyA, bodyB, isSpring);
 
-          // NEW: Broadcast link creation to the room!
           if (socketRef.current && roomCodeRef.current) {
             socketRef.current.emit('action-link', {
               roomCode: roomCodeRef.current,
@@ -174,13 +207,9 @@ const PhysicsCanvas = forwardRef(({ onUpdateStats, activeTool, socket, roomCode,
       }
     });
 
-    // ==========================================
-    // --- THE AGENT MIDDLEWARE (MULTIPLAYER) ---
-    // ==========================================
     let frameCount = 0;
     
     Events.on(engine, 'beforeUpdate', () => {
-      // NEW: We removed the Guest restriction here so Guests can click!
       if (activeToolRef.current !== 'cursor') {
         mouseConstraint.constraint.stiffness = 0; 
       } else {
@@ -192,13 +221,11 @@ const PhysicsCanvas = forwardRef(({ onUpdateStats, activeTool, socket, roomCode,
       frameCount++;
       const trackedBodies = engine.world.bodies.filter(b => b.label === 'tracked-mass');
       
-      // 1. HOST LOGIC: Broadcast positions to the server
       if (isHostRef.current && roomCodeRef.current && socketRef.current && frameCount % 2 === 0) {
         const syncData = trackedBodies.map(b => ({ id: b.customId, x: b.position.x, y: b.position.y, angle: b.angle }));
         socketRef.current.emit('sync-physics', { roomCode: roomCodeRef.current, bodies: syncData });
       }
 
-      // 2. GUEST DRAG LOGIC: Tell the host I am moving something!
       if (!isHostRef.current && draggedBodyRef.current && socketRef.current && roomCodeRef.current) {
         socketRef.current.emit('guest-dragging', {
           roomCode: roomCodeRef.current,
@@ -210,7 +237,6 @@ const PhysicsCanvas = forwardRef(({ onUpdateStats, activeTool, socket, roomCode,
         });
       }
 
-      // 3. ANALYTICS
       if (frameCount % 6 === 0 && trackedBodies.length > 0) { 
         const targetBody = trackedBodies[trackedBodies.length - 1]; 
         const speed = targetBody.speed; 
@@ -219,15 +245,12 @@ const PhysicsCanvas = forwardRef(({ onUpdateStats, activeTool, socket, roomCode,
       }
     });
 
-    // --- SOCKET EVENT LISTENERS ---
     if (socket) {
-      // Receive physics from Host
       socket.on('physics-updated', (remoteBodies) => {
         if (isHostRef.current) return; 
         
         remoteBodies.forEach(remoteData => {
           const localBody = engine.world.bodies.find(b => b.customId === remoteData.id);
-          // CRITICAL FIX: Do NOT accept Host override if I am the one dragging this block!
           const isBeingDraggedByMe = draggedBodyRef.current && draggedBodyRef.current.customId === remoteData.id;
           
           if (localBody && !isBeingDraggedByMe) {
@@ -238,7 +261,6 @@ const PhysicsCanvas = forwardRef(({ onUpdateStats, activeTool, socket, roomCode,
         });
       });
 
-      // Receive Guest Drag Coordinates (Host Only)
       socket.on('host-override-drag', (dragData) => {
         if (isHostRef.current) {
           const localBody = engine.world.bodies.find(b => b.customId === dragData.id);
@@ -249,7 +271,6 @@ const PhysicsCanvas = forwardRef(({ onUpdateStats, activeTool, socket, roomCode,
         }
       });
 
-      // Receive Remote Link Creation
       socket.on('remote-link', (data) => {
         const bodyA = engine.world.bodies.find(b => b.customId === data.bodyAId);
         const bodyB = engine.world.bodies.find(b => b.customId === data.bodyBId);
@@ -284,7 +305,13 @@ const PhysicsCanvas = forwardRef(({ onUpdateStats, activeTool, socket, roomCode,
     };
   }, [onUpdateStats, socket]);
 
-  return <div ref={sceneRef} className="rounded-lg overflow-hidden border border-slate-700 shadow-xl bg-slate-900" />;
+  // NEW: Update wrapper div classes to transition cleanly with Tailwind
+  return (
+    <div 
+      ref={sceneRef} 
+      className={`rounded-lg overflow-hidden border shadow-xl transition-colors duration-300 ${isDarkMode ? 'border-slate-700 shadow-none' : 'border-slate-300 shadow-slate-200'}`} 
+    />
+  );
 });
 
 export default PhysicsCanvas;
