@@ -39,7 +39,7 @@ export default function ExperimentLibrary({ isOpen, onClose, onSave, onLoad }) {
 
   const handleDelete = async (id) => {
     try {
-      await fetch(`http://localhost:5000/api/experiments/${id}`, { method: 'DELETE' });
+      await fetch(`${import.meta.env.VITE_BACKEND_URL}/api/experiments`, { method: 'DELETE' });
       // Remove it from the UI after successful deletion
       setExperiments(experiments.filter(exp => exp._id !== id));
     } catch (err) {

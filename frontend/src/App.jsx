@@ -33,7 +33,7 @@ function App() {
   }, []);
 
   useEffect(() => {
-    socketRef.current = io('http://localhost:5000');
+    socketRef.current = io(import.meta.env.VITE_BACKEND_URL);
 
     socketRef.current.on('room-joined', (data) => {
       setIsHost(data.isHost);
