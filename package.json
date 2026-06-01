@@ -4,5 +4,8 @@
     "matter-js": "^0.20.0",
     "recharts": "^3.8.1",
     "tailwindcss": "^4.3.0"
+  },
+  "optionalDependencies": {
+    "lightningcss-linux-x64-gnu": "*"
   }
 }
